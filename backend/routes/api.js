@@ -4,6 +4,32 @@ const { db } = require('../services/firebase');
 const { evaluateZones } = require('../services/decisionEngine');
 const { generateRecommendation } = require('../services/vertex');
 
+// ✅ TEST ROUTE (VERY IMPORTANT FOR DEBUG)
+router.get('/test', (req, res) => {
+  res.json({ message: "API working ✅" });
+});
+
+// ✅ HEALTH CHECK
+router.get('/health', async (req, res) => {
+  const status = { firestore: 'error', ai: 'error' };
+
+  try {
+    await db.collection('zones').limit(1).get();
+    status.firestore = 'ok';
+  } catch (e) {
+    console.log("Firestore error:", e.message);
+  }
+
+  try {
+    const ai = await generateRecommendation("hello", []);
+    if (ai) status.ai = 'ok';
+  } catch (e) {
+    console.log("AI error:", e.message);
+  }
+
+  res.json(status);
+});
+
 // 🔥 CHAT ENDPOINT
 router.post('/chat', async (req, res) => {
   try {
@@ -13,7 +39,7 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message required' });
     }
 
-    // 🔹 fetch zones
+    // 🔹 Fetch zones
     const snapshot = await db.collection('zones').get();
     const zones = [];
 
@@ -21,23 +47,23 @@ router.post('/chat', async (req, res) => {
       zones.push({ id: doc.id, ...doc.data() });
     });
 
-    // 🔥 STEP 1 — LOGIC FIRST
+    // 🔥 STEP 1 — LOGIC
     const logicResult = evaluateZones(message, zones, userType);
 
-    // 🔥 STEP 2 — IF LOGIC FAILS → AI
+    // 🔥 STEP 2 — AI FALLBACK
     if (!logicResult) {
       const aiResult = await generateRecommendation(message, zones);
 
       return res.json({
         response:
           aiResult?.response ||
-          "I didn't fully understand that. You can ask me about food, restrooms, gates, or exits.",
+          "I didn’t fully understand that. You can ask me about food, restrooms, gates, or exits.",
         recommendation: null,
-        meta: { source: "ai/fallback" }
+        meta: { source: "ai" }
       });
     }
 
-    // 🔥 STEP 3 — LOGIC WORKS → TRY AI ENHANCEMENT
+    // 🔥 STEP 3 — HYBRID
     let finalResponse = logicResult.response;
     let finalZone = logicResult.recommendation;
 
@@ -52,11 +78,10 @@ router.post('/chat', async (req, res) => {
           finalResponse = aiResult.response;
         }
       }
-    } catch {
-      // ignore AI failure
+    } catch (e) {
+      console.log("AI enhancement failed:", e.message);
     }
 
-    // 🔥 FINAL RESPONSE
     res.json({
       response:
         finalResponse +
