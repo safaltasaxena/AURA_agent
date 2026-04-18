@@ -12,24 +12,20 @@ const initialZones = [
 ];
 
 async function seedData() {
-  console.log('Starting to seed data...');
-  try {
-    const batch = db.batch();
-    const zonesRef = db.collection('zones');
+  const batch = db.batch();
+  const zonesRef = db.collection('zones');
 
-    for (const zone of initialZones) {
-      // Create a document with the zone name as the ID, lowercased and spaces replaced
-      const docId = zone.name.toLowerCase().replace(/\s+/g, '-');
-      const docRef = zonesRef.doc(docId);
-      batch.set(docRef, zone);
-      console.log(`Prepared to add: ${zone.name}`);
-    }
+  for (const zone of initialZones) {
+    const docId = zone.name.toLowerCase().replace(/\s+/g, '-');
 
-    await batch.commit();
-    console.log('Successfully seeded database with initial zones!');
-  } catch (error) {
-    console.error('Error seeding data:', error);
+    batch.set(zonesRef.doc(docId), {
+      id: docId,
+      ...zone
+    });
   }
+
+  await batch.commit();
+  console.log("✅ Seed complete");
 }
 
 seedData();

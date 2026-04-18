@@ -9,17 +9,20 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json());
 
+// API routes
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
-// Serve static frontend in production (useful for Cloud Run deployment)
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
+// ✅ Serve frontend ONLY in production
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-// Catch-all route to serve the React app for any unhandled routes (SPA)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-});
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  });
+}
 
+// Start server
 app.listen(PORT, () => {
   console.log(`=================================`);
   console.log(`🚀 Aura Backend Server Started`);
