@@ -3,29 +3,15 @@ const router = express.Router();
 
 console.log("🔥 API FILE LOADED");
 
-// 🔥 SAFE IMPORTS
-let db, evaluateZones, generateRecommendation;
+// 🔥 FAIL-FAST IMPORTS (Server should crash if these are missing)
+const { db } = require('../services/firebase');
+const { evaluateZones } = require('../services/decisionEngine');
+const { extractIntent } = require('../services/vertex');
 
-try {
-  db = require('../services/firebase').db;
-  console.log("✅ Firebase loaded");
-} catch (e) {
-  console.log("❌ Firebase failed:", e.message);
-}
-
-try {
-  evaluateZones = require('../services/decisionEngine').evaluateZones;
-  console.log("✅ Decision engine loaded");
-} catch (e) {
-  console.log("❌ Decision engine failed:", e.message);
-}
-
-try {
-  generateRecommendation = require('../services/vertex').generateRecommendation;
-  console.log("✅ AI loaded");
-} catch (e) {
-  console.log("❌ AI failed:", e.message);
-}
+// 🚀 IN-MEMORY CACHE
+let zonesCache = null;
+let lastCacheTime = 0;
+const CACHE_TTL = 30000; // 30 seconds
 
 // ✅ TEST ROUTE
 router.get('/test', (req, res) => {
@@ -44,17 +30,24 @@ router.post('/chat', async (req, res) => {
 
     let zones = [];
 
-    // 🔹 FETCH ZONES FROM FIREBASE
+    // 🔹 FETCH ZONES FROM FIREBASE (WITH CACHE)
     if (db) {
-      try {
-        const snapshot = await db.collection('zones').get();
-        snapshot.forEach(doc => {
-          zones.push({ id: doc.id, ...doc.data() });
-        });
-        console.log("🔥 ZONES:", zones);
-        console.log(`✅ Fetched ${zones.length} zones from Firestore.`);
-      } catch (e) {
-        console.log("❌ Firestore fetch error:", e.message);
+      const now = Date.now();
+      if (zonesCache && (now - lastCacheTime < CACHE_TTL)) {
+        zones = zonesCache;
+      } else {
+        try {
+          const snapshot = await db.collection('zones').get();
+          snapshot.forEach(doc => {
+            zones.push({ id: doc.id, ...doc.data() });
+          });
+          zonesCache = zones;
+          lastCacheTime = now;
+          console.log(`✅ Fetched ${zones.length} zones from Firestore (Cached for 30s).`);
+        } catch (e) {
+          console.error("❌ Firestore fetch error:", e.message);
+          if (zonesCache) zones = zonesCache; // Fallback to stale cache
+        }
       }
     }
 
@@ -72,45 +65,38 @@ router.post('/chat', async (req, res) => {
       ];
     }
 
-    // 🔥 STEP 1 — DECISION ENGINE
-    let logicResult = null;
-
-    if (evaluateZones) {
-      try {
-        logicResult = evaluateZones(message, zones, userType);
-      } catch (e) {
-        console.log("❌ Logic error:", e.message);
-      }
+    // 🔥 STEP 1 — AI INTENT EXTRACTION
+    let aiIntent = null;
+    if (extractIntent) {
+      aiIntent = await extractIntent(message);
+    } else {
+      aiIntent = { intent: null, urgency: "normal", avoid: false, conversational_response: "AI Offline" };
     }
 
-    // 🔥 STEP 2 — AI FALLBACK
-    if (!logicResult && generateRecommendation) {
-      try {
-        const ai = await generateRecommendation(message, zones);
+    console.log("🧠 AI Structured Intent:", aiIntent);
 
-        return res.json({
-          response: ai?.response || "I'm here to help 😊",
-          recommendation: null,
-          meta: { source: "ai" }
-        });
-      } catch (e) {
-        console.log("❌ AI fallback error:", e.message);
-      }
-    }
-
-    // 🔥 STEP 3 — HYBRID RESPONSE
-    let finalResponse = logicResult?.response || "Let me help you.";
-    let finalZone = logicResult?.recommendation || null;
-
-    if (!logicResult) {
-      const ai = await generateRecommendation(message, zones);
-
+    // 🔥 STEP 2 — HYBRID ROUTING
+    if (!aiIntent.intent) {
+      // It's a conversational message or unknown intent
       return res.json({
-        response: ai?.response || "I'm here to help 😊",
+        response: aiIntent.conversational_response || "I'm here to help 😊",
         recommendation: null,
         meta: { source: "ai" }
       });
     }
+
+    // It is a zone intent! Let the logic engine evaluate it.
+    let logicResult = null;
+    if (evaluateZones) {
+      try {
+        logicResult = evaluateZones(aiIntent, zones, userType);
+      } catch (e) {
+        console.error("❌ Logic error:", e.message);
+      }
+    }
+
+    let finalResponse = logicResult?.response || "I found something, but had trouble formatting it.";
+    let finalZone = logicResult?.recommendation || null;
 
     // ✅ FINAL RESPONSE
     res.json({

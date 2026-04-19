@@ -4,36 +4,8 @@ const getCrowdLabel = (c) => {
   return "high";
 };
 
-const evaluateZones = (message, zones, userType = 'normal') => {
-  const msg = message.toLowerCase();
-
-  // 🔥 Non-zone queries → let AI handle
-  const nonZonePatterns = [
-    /who are you/,
-    /what can you do/,
-    /tell me/,
-    /joke/,
-    /hi/,
-    /hello/,
-    /hey/
-  ];
-
-  if (nonZonePatterns.some(p => p.test(msg))) {
-    return null;
-  }
-
-  // 🔥 Detect category (normalized)
-  let category = null;
-
-  if (msg.match(/food|eat|hungry|restaurant/)) {
-    category = 'food court';
-  } else if (msg.match(/restroom|toilet|bathroom|washroom/)) {
-    category = 'restroom';
-  } else if (msg.match(/gate|boarding/)) {
-    category = 'gate';
-  } else if (msg.match(/exit|leave|out|go home/)) {
-    category = 'exit';
-  }
+const evaluateZones = (aiIntent, zones, userType = 'normal') => {
+  const { intent: category, urgency, avoid: avoidMode } = aiIntent;
 
   // ❌ If nothing matched → AI
   if (!category) return null;
@@ -57,25 +29,13 @@ const evaluateZones = (message, zones, userType = 'normal') => {
     return null; // Let the AI handle it instead of returning a generic failure message
   }
 
-  // 🔥 Detect special intents
-  const avoidMode = /avoid|not go|worst|bad/.test(msg);
-
+  // 🔥 Detect special intents using AI structured output!
   let waitWeight = 2;
   let distWeight = 0.1;
   let crowdWeight = 1;
 
-  // 🔥 Intent-based priority
-  if (msg.match(/quick|fast|hurry|asap/)) {
-    waitWeight = 5;
-  }
-
-  if (msg.match(/don.?t.*walk|dont.*walk|no walking|near|close|nearest|closest/)) {
-    distWeight = 3; // 🔥 VERY IMPORTANT
-  }
-
-  if (msg.match(/crowd|busy|avoid crowd/)) {
-    crowdWeight = 3;
-  }
+  if (urgency === 'high') waitWeight = 5;
+  if (urgency === 'low') distWeight = 3;
 
   // 🔥 userType override
   if (userType === 'fast') waitWeight = 5;

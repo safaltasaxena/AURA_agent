@@ -136,27 +136,38 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSubmit} style={styles.inputForm}>
+      <form onSubmit={handleSubmit} style={styles.inputForm} aria-label="Chat input form">
+        <label htmlFor="userTypeSelect" style={{ display: 'none' }}>Recommendation Preference</label>
         <select
+          id="userTypeSelect"
           value={userType}
           onChange={(e) => setUserType(e.target.value)}
           style={styles.select}
           title="Recommendation Preference"
+          aria-label="Select recommendation preference"
         >
           <option value="normal">Normal</option>
           <option value="fast">Fast (Wait Time)</option>
           <option value="lazy">Lazy (Distance)</option>
           <option value="urgent">Urgent (Immediate)</option>
         </select>
+        <label htmlFor="chatInput" style={{ display: 'none' }}>Message Aura</label>
         <input
+          id="chatInput"
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask Aura something..."
           style={styles.input}
+          aria-label="Message input"
         />
-        <button type="submit" disabled={!input.trim() || loading} style={styles.sendButton}>
-          <Send size={18} />
+        <button 
+          type="submit" 
+          disabled={!input.trim() || loading} 
+          style={styles.sendButton}
+          aria-label="Send message"
+        >
+          <Send size={18} aria-hidden="true" />
         </button>
       </form>
 
