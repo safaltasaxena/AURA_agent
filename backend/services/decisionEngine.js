@@ -7,7 +7,7 @@ const getCrowdLabel = (c) => {
 const evaluateZones = (message, zones, userType = 'normal') => {
   const msg = message.toLowerCase();
 
-  // 🔥 NON-ZONE → let AI handle
+  // 🔥 Non-zone queries → let AI handle
   const nonZonePatterns = [
     /who are you/,
     /what can you do/,
@@ -22,45 +22,55 @@ const evaluateZones = (message, zones, userType = 'normal') => {
     return null;
   }
 
-  // 🔥 NEGATIVE intent
-  const avoidMode = /avoid|not go|worst|bad/.test(msg);
-
+  // 🔥 Detect category (normalized)
   let category = null;
 
   if (msg.match(/food|eat|hungry|restaurant/)) {
-    category = 'Food Court';
+    category = 'food court';
   } else if (msg.match(/restroom|toilet|bathroom|washroom/)) {
-    category = 'Restroom';
+    category = 'restroom';
   } else if (msg.match(/gate|boarding/)) {
-    category = 'Gate';
+    category = 'gate';
   } else if (msg.match(/exit|leave|out|go home/)) {
-    category = 'Exit';
+    category = 'exit';
   }
 
-  // 🔥 If no category → AI
+  // ❌ If nothing matched → AI
   if (!category) return null;
 
-  const relevantZones = zones.filter(z => z.category === category);
+  console.log(`\n[DECISION ENGINE] Processing Request`);
+  console.log(`[DECISION ENGINE] Total Zones Available: ${zones.length}`);
+  console.log(`[DECISION ENGINE] Detected Intent Category: '${category}'`);
+
+  // 🔥 HIGHLY ROBUST FILTER (Strips spaces, hyphens, and cases)
+  const normalize = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizedTargetCategory = normalize(category);
+
+  const relevantZones = zones.filter(
+    z => normalize(z.category) === normalizedTargetCategory
+  );
+
+  console.log(`[DECISION ENGINE] Matched Zones Count: ${relevantZones.length}`);
 
   if (!relevantZones.length) {
-    return {
-      response: "I couldn't find relevant zones right now.",
-      recommendation: null
-    };
+    console.log(`[DECISION ENGINE] No relevant zones found for category: ${category}. Falling back to AI.`);
+    return null; // Let the AI handle it instead of returning a generic failure message
   }
 
-  // 🔥 BASE WEIGHTS
+  // 🔥 Detect special intents
+  const avoidMode = /avoid|not go|worst|bad/.test(msg);
+
   let waitWeight = 2;
   let distWeight = 0.1;
   let crowdWeight = 1;
 
-  // 🔥 KEY FIX: intent-based priority
+  // 🔥 Intent-based priority
   if (msg.match(/quick|fast|hurry|asap/)) {
     waitWeight = 5;
   }
 
-  if (msg.match(/don.?t want to walk|dont want to walk|near|close/)) {
-    distWeight = 2; // 🔥 VERY HIGH priority
+  if (msg.match(/don.?t.*walk|dont.*walk|no walking|near|close|nearest|closest/)) {
+    distWeight = 3; // 🔥 VERY IMPORTANT
   }
 
   if (msg.match(/crowd|busy|avoid crowd/)) {
@@ -69,13 +79,13 @@ const evaluateZones = (message, zones, userType = 'normal') => {
 
   // 🔥 userType override
   if (userType === 'fast') waitWeight = 5;
-  if (userType === 'lazy') distWeight = 2;
+  if (userType === 'lazy') distWeight = 3;
   if (userType === 'urgent') {
     waitWeight = 4;
     crowdWeight = 3;
   }
 
-  // 🔥 scoring
+  // 🔥 SCORING
   relevantZones.forEach(zone => {
     zone.score =
       zone.waitTime * waitWeight +
@@ -83,7 +93,7 @@ const evaluateZones = (message, zones, userType = 'normal') => {
       zone.crowdLevel * crowdWeight;
   });
 
-  // 🔥 sort logic
+  // 🔥 SORT
   relevantZones.sort((a, b) =>
     avoidMode ? b.score - a.score : a.score - b.score
   );
@@ -99,6 +109,7 @@ const evaluateZones = (message, zones, userType = 'normal') => {
     response = `I'd recommend ${selectedZone.name}. It has ${crowdLabel} crowd with around ${selectedZone.waitTime} minutes wait time and is about ${selectedZone.distance} meters away.`;
   }
 
+  // 🔥 Extra improvement
   if (!avoidMode && selectedZone.waitTime === 0 && selectedZone.crowdLevel < 20) {
     response += " This is an optimal low-traffic option.";
   }

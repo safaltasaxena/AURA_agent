@@ -29,28 +29,43 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      // Use environment variable, fallback to localhost in dev, or relative path in production
-      const isDev = import.meta.env.DEV;
-      const apiUrl = import.meta.env.VITE_API_URL || (isDev ? 'http://localhost:8080' : '');
-      const response = await axios.post(`${apiUrl}/api/chat`, { 
+      // STRICT URL RESOLUTION
+      const rawApiUrl = import.meta.env.VITE_API_URL || '';
+      const cleanApiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+      const finalUrl = cleanApiUrl || (import.meta.env.DEV ? 'http://localhost:8080' : '');
+
+      const requestUrl = `${finalUrl}/api/chat`;
+      console.log("🚀 [DEBUG] Sending request to:", requestUrl);
+      console.log("📦 [DEBUG] Payload:", { message: userMessage.text, userType });
+
+      const response = await axios.post(requestUrl, {
         message: userMessage.text,
         userType: userType
       });
-      
-      const botMessage = { 
-        id: Date.now() + 1, 
-        text: response.data.response, 
+
+      console.log("✅ [DEBUG] Response received:", response.data);
+
+      const botMessage = {
+        id: Date.now() + 1,
+        text: response.data.response,
         sender: 'bot',
         recommendation: response.data.recommendation
       };
-      
+
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      console.error("Chat error:", error);
-      const errorMessage = { 
-        id: Date.now() + 1, 
-        text: "I'm having trouble connecting right now. Please try again later.", 
-        sender: 'bot' 
+      console.error("❌ [DEBUG] Chat Request Failed:", error);
+      if (error.response) {
+        console.error("❌ [DEBUG] Server responded with:", error.response.status, error.response.data);
+      } else if (error.request) {
+        console.error("❌ [DEBUG] No response received. CORS or Network error.");
+      }
+
+      const errorMessage = {
+        id: Date.now() + 1,
+        text: `Connection Error: ${error.message}. (See console for details)`,
+        sender: 'bot',
+        isError: true
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -66,7 +81,7 @@ export default function Chat() {
           <h2>Aura Assistant</h2>
         </div>
       </div>
-      
+
       <div style={styles.messagesContainer}>
         {messages.map((msg) => (
           <div key={msg.id} style={msg.sender === 'user' ? styles.messageWrapperUser : styles.messageWrapperBot}>
@@ -75,7 +90,7 @@ export default function Chat() {
             </div>
             <div style={msg.sender === 'user' ? styles.messageUser : styles.messageBot}>
               <p style={styles.messageText}>{msg.text}</p>
-              
+
               {msg.recommendation && (
                 <div style={styles.recommendationCard}>
                   <h4 style={styles.recTitle}>{msg.recommendation.name}</h4>
@@ -93,10 +108,10 @@ export default function Chat() {
                       <span style={styles.statValue}>
                         <div style={styles.crowdBar}>
                           <div style={{
-                            ...styles.crowdFill, 
+                            ...styles.crowdFill,
                             width: `${msg.recommendation.crowdLevel}%`,
-                            background: msg.recommendation.crowdLevel > 70 ? '#ef4444' : 
-                                        msg.recommendation.crowdLevel > 40 ? '#f59e0b' : '#10b981'
+                            background: msg.recommendation.crowdLevel > 70 ? '#ef4444' :
+                              msg.recommendation.crowdLevel > 40 ? '#f59e0b' : '#10b981'
                           }}></div>
                         </div>
                       </span>
@@ -122,9 +137,9 @@ export default function Chat() {
       </div>
 
       <form onSubmit={handleSubmit} style={styles.inputForm}>
-        <select 
-          value={userType} 
-          onChange={(e) => setUserType(e.target.value)} 
+        <select
+          value={userType}
+          onChange={(e) => setUserType(e.target.value)}
           style={styles.select}
           title="Recommendation Preference"
         >
@@ -144,7 +159,7 @@ export default function Chat() {
           <Send size={18} />
         </button>
       </form>
-      
+
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }

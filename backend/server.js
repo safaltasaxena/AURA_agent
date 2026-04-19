@@ -1,32 +1,29 @@
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
-require('dotenv').config();
-
 const app = express();
-const PORT = process.env.PORT || 8080;
+const cors = require('cors');
 
-app.use(cors());
+app.use(cors({
+  origin: "*",
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.options('*', cors());
 app.use(express.json());
 
-// API routes
+// Load full API Routes
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
-// ✅ Serve frontend ONLY in production
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+const path = require('path');
 
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-  });
-}
+// Serve static frontend in production
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`=================================`);
-  console.log(`🚀 Aura Backend Server Started`);
-  console.log(`📡 Port: ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`=================================`);
+// Catch-all route to serve the React app for any unhandled routes (SPA)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+});
+
+app.listen(8080, () => {
+  console.log("Backend running on 8080");
 });
